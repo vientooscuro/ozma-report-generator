@@ -21,21 +21,40 @@ if ! [ -e /etc/ozma-report-generator/config.json ]; then
     echo "DB_NAME must be set" >&2
     exit 1
   fi
-  if [ -z "$AUTH_AUTHORITY" ]; then
-    echo "AUTH_AUTHORITY must be set" >&2
-    exit 1
+
+  if [ -z "$EXTERNAL_ORIGIN" ]; then
+    # Backward compatibility
+    if [ -n "$ORIGIN" ]; then
+      EXTERNAL_ORIGIN="$ORIGIN"
+    elif [ -n "$EXTERNAL_HOSTPORT" ]; then
+      EXTERNAL_ORIGIN="${EXTERNAL_PROTOCOL:-http}://${EXTERNAL_HOSTPORT}"
+    else
+      echo "EXTERNAL_ORIGIN must be set" >&2
+      exit 1
+    fi
   fi
+
+  if [ -z "$AUTH_AUTHORITY" ]; then
+    if [ -n "$EXTERNAL_ORIGIN" ]; then
+      AUTH_AUTHORITY="${EXTERNAL_ORIGIN}/auth/realms/ozma"
+    else
+      echo "AUTH_AUTHORITY must be set" >&2
+      exit 1
+    fi
+  fi
+
   if [ -z "$AUTH_CLIENT_ID" ]; then
     echo "AUTH_CLIENT_ID must be set" >&2
     exit 1
   fi
-  if [ -z "$ORIGIN" ]; then
-    echo "ORIGIN must be set" >&2
-    exit 1
-  fi
+
   if [ -z "$OZMA_DB_URL" ]; then
-    echo "OZMA_DB_URL must be set" >&2
-    exit 1
+    if [ -n "$OZMA_DB_HOSTPORT" ]; then
+      OZMA_DB_URL="${OZMA_DB_PROTOCOL:-http}://${OZMA_DB_HOSTPORT}"
+    else
+      echo "OZMA_DB_URL must be set" >&2
+      exit 1
+    fi
   fi
 
   mkdir -p /etc/ozma-report-generator
@@ -51,7 +70,7 @@ if ! [ -e /etc/ozma-report-generator/config.json ]; then
     --arg authClientSecret "$AUTH_CLIENT_SECRET" \
     --argjson authRequireHttpsMetadata "${AUTH_REQUIRE_HTTPS_METADATA:-true}" \
     --arg pathBase "$PATH_BASE" \
-    --arg origin "$ORIGIN" \
+    --arg origin "$EXTERNAL_ORIGIN" \
     --arg ozmadbUrl "$OZMA_DB_URL" \
     --arg ozmadbForceInstance "$OZMA_DB_FORCE_INSTANCE" \
     '{

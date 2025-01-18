@@ -25,7 +25,6 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.*" />
     <PackageReference Include="QRCoder" Version="1.6.*" />
     <PackageReference Include="RestSharp" Version="112.0.*" />
-    <PackageReference Include="SkiaSharp" Version="2.88.*" />
     <PackageReference Include="ZXing.Net.Bindings.SkiaSharp" Version="0.16.*" />
   </ItemGroup>
 

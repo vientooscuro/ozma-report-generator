@@ -49,8 +49,6 @@ if ! [ -e /etc/ozma-report-generator/config.json ]; then
   fi
 
   if [ -z "$OZMA_DB_URL" ]; then
-    if [ -n "$OZMA_DB_HOSTPORT" ]; then
-      OZMA_DB_URL="${OZMA_DB_PROTOCOL:-http}://${OZMA_DB_HOSTPORT}"
     if [ -n "$OZMA_DB_HOST" ]; then
       OZMA_DB_URL="${OZMA_DB_PROTOCOL:-http}://${OZMA_DB_HOST}:${OZMA_DB_PORT:-5000}"
     else

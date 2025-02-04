@@ -77,7 +77,7 @@ if ! [ -e /etc/ozma-report-generator/config.json ]; then
       "kestrel": {
         "endPoints": {
           "http": {
-            "url": "http://0.0.0.0:5000"
+            "url": "http://*:5000"
           }
         }
       },

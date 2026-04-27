@@ -280,6 +280,36 @@ namespace ReportGenerator.Controllers
             }
         }
 
+        [HttpGet]
+        [Route("admin/{instanceName}/DownloadTemplate")]
+        public async Task<IActionResult> DownloadTemplate(string instanceName, int id)
+        {
+            var permissions = await HasPermissionsForInstance(instanceName);
+            if ((permissions == null) || (permissions.ResponseCode == System.Net.HttpStatusCode.Unauthorized))
+                return StatusCode(401, "relog");
+            if (!permissions.IsAdmin) return Unauthorized("User has no admin rights for this instance");
+
+            using (var repository = new ReportTemplateRepository(configuration, instanceName))
+            {
+                var template = await repository.LoadTemplate(id);
+                if (template == null) return NotFound();
+
+                OdfDocument odt;
+                await using (var stream = new MemoryStream(template.OdtWithoutQueries))
+                    odt = await OdfDocument.LoadFromAsync(stream);
+
+                OpenDocumentTextFunctions.RestoreQueriesInOdt(odt, template.ReportTemplateQueries);
+
+                byte[] bytes;
+                await using (var stream = new MemoryStream())
+                {
+                    await odt.SaveAsync(stream);
+                    bytes = stream.ToArray();
+                }
+                return File(bytes, "application/vnd.oasis.opendocument.text", template.Name + ".odt");
+            }
+        }
+
         [HttpDelete]
         [Route("admin/{instanceName}/DeleteTemplate")]
         public async Task<IActionResult> DeleteTemplate(string instanceName, int id)

@@ -5,6 +5,7 @@
         <th>Схема</th>
         <th></th>
         <th></th>
+        <th></th>
     </tr>
 </thead>
 <tbody>
@@ -14,6 +15,7 @@
         <td>@item.Name</td>
         <td>@item.Schema.Name</td>
         <td><button type="button" class="btn btn-success" onclick="SelectOdt(@item.Id) ">Обновить файл шаблона</button></td>
+        <td><a href="./DownloadTemplate?id=@item.Id" class="btn btn-primary">Скачать</a></td>
         <td><button type="button" class="btn btn-danger" onclick="Delete('Template', @item.Id) ">Удалить</button></td>
     </tr>
 }

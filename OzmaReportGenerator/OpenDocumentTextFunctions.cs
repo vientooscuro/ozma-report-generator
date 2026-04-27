@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
+using ReportGenerator.Models;
 using ReportGenerator.OzmaDBApi;
 using Sandwych.Reporting.OpenDocument;
 
@@ -93,6 +94,41 @@ namespace ReportGenerator
                 }
             }
             return queriesFromOdt;
+        }
+
+        public static OdfDocument RestoreQueriesInOdt(OdfDocument odt, IList<ReportTemplateQuery> queries)
+        {
+            var contentXml = odt.ReadMainContentXml();
+            XmlNode? textNode = null;
+            foreach (XmlNode? bodyNode in contentXml.DocumentElement!.ChildNodes)
+            {
+                if (bodyNode?.Name == "office:body")
+                {
+                    foreach (XmlNode? child in bodyNode.ChildNodes)
+                    {
+                        if (child?.Name == "office:text") { textNode = child; break; }
+                    }
+                    break;
+                }
+            }
+            if (textNode == null) throw new Exception("Error parsing odt file. Cant find office:text tag");
+
+            foreach (var query in queries)
+            {
+                var queryTypeStr = (QueryType)query.QueryType switch
+                {
+                    QueryType.SingleValue => "SingleValue",
+                    QueryType.SingleRow => "SingleRow",
+                    QueryType.ManyRows => "ManyRows",
+                    _ => throw new Exception("Unknown query type: " + query.QueryType)
+                };
+                var paragraph = contentXml.CreateElement("text", "p", "urn:oasis:names:tc:opendocument:xmlns:text:1.0");
+                paragraph.InnerText = $"<query name=\"{query.Name}\" type=\"{queryTypeStr}\">{query.QueryText}</query>";
+                textNode.AppendChild(paragraph);
+            }
+
+            odt.WriteMainContentXml(contentXml);
+            return odt;
         }
 
         public static OdfDocument RemoveQueriesFromOdt(OdfDocument odtWithQueries)

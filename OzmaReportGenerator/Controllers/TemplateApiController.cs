@@ -43,6 +43,13 @@ namespace ReportGenerator.Controllers
         private static IActionResult BadRequestError(string message) =>
             new ObjectResult(new ApiError("bad_request", message)) { StatusCode = 400 };
 
+        private IActionResult InstanceFailure(Exception e)
+        {
+            if (e is InstanceForcedException forced)
+                return BadRequestError(forced.Message);
+            return NotFoundError(e.Message);
+        }
+
         /// <summary>PostgreSQL unique violation, i.e. a name that is already taken.</summary>
         private static bool IsDuplicate(Exception e)
         {
@@ -62,6 +69,15 @@ namespace ReportGenerator.Controllers
                 using var repository = new ReportTemplateSchemaRepository(configuration, instanceName);
                 var schemas = await repository.LoadAllSchemas();
                 return Ok(schemas.Select(s => new SchemaDto { Id = s.Id, Name = s.Name }).ToList());
+            }
+            catch (InstanceNotFoundException)
+            {
+                // The instance is configured but has no data yet: nothing to list.
+                return Ok(new List<SchemaDto>());
+            }
+            catch (InstanceForcedException e)
+            {
+                return BadRequestError(e.Message);
             }
             catch (Exception e)
             {
@@ -106,6 +122,10 @@ namespace ReportGenerator.Controllers
                 await repository.DeleteSchema(id);
                 return Ok();
             }
+            catch (Exception e) when (e is InstanceNotFoundException || e is InstanceForcedException)
+            {
+                return InstanceFailure(e);
+            }
             catch (Exception e)
             {
                 return Failure(e, "Failed to delete schema");
@@ -135,6 +155,15 @@ namespace ReportGenerator.Controllers
                     });
                 }
                 return Ok(result);
+            }
+            catch (InstanceNotFoundException)
+            {
+                // The instance is configured but has no data yet: nothing to list.
+                return Ok(new List<TemplateSummaryDto>());
+            }
+            catch (InstanceForcedException e)
+            {
+                return BadRequestError(e.Message);
             }
             catch (Exception e)
             {
@@ -170,6 +199,10 @@ namespace ReportGenerator.Controllers
                     }).ToList(),
                 });
             }
+            catch (Exception e) when (e is InstanceNotFoundException || e is InstanceForcedException)
+            {
+                return InstanceFailure(e);
+            }
             catch (Exception e)
             {
                 return Failure(e, "Failed to load template");
@@ -188,6 +221,10 @@ namespace ReportGenerator.Controllers
 
                 var bytes = await TemplateService.RestoreOdtAsync(template.OdtWithoutQueries, template.ReportTemplateQueries);
                 return File(bytes, "application/vnd.oasis.opendocument.text", template.Name + ".odt");
+            }
+            catch (Exception e) when (e is InstanceNotFoundException || e is InstanceForcedException)
+            {
+                return InstanceFailure(e);
             }
             catch (Exception e)
             {
@@ -249,6 +286,10 @@ namespace ReportGenerator.Controllers
             {
                 return BadRequestError("Template '" + name + "' already exists in schema '" + schemaName + "'");
             }
+            catch (Exception e) when (e is InstanceNotFoundException || e is InstanceForcedException)
+            {
+                return InstanceFailure(e);
+            }
             catch (Exception e)
             {
                 return Failure(e, "Failed to create template");
@@ -296,6 +337,10 @@ namespace ReportGenerator.Controllers
                     QueryCount = model.ReportTemplateQueries.Count,
                 });
             }
+            catch (Exception e) when (e is InstanceNotFoundException || e is InstanceForcedException)
+            {
+                return InstanceFailure(e);
+            }
             catch (Exception e)
             {
                 return Failure(e, "Failed to replace template file");
@@ -313,6 +358,10 @@ namespace ReportGenerator.Controllers
                 if (template == null) return NotFoundError("Template " + id + " not found");
                 await repository.DeleteTemplate(id);
                 return Ok();
+            }
+            catch (Exception e) when (e is InstanceNotFoundException || e is InstanceForcedException)
+            {
+                return InstanceFailure(e);
             }
             catch (Exception e)
             {
@@ -342,6 +391,10 @@ namespace ReportGenerator.Controllers
                     Type = ((QueryType)query.QueryType).ToString(),
                     QueryText = query.QueryText,
                 });
+            }
+            catch (Exception e) when (e is InstanceNotFoundException || e is InstanceForcedException)
+            {
+                return InstanceFailure(e);
             }
             catch (Exception e)
             {
@@ -376,6 +429,10 @@ namespace ReportGenerator.Controllers
                     expressions = analysis.Expressions,
                     findings = analysis.Findings,
                 });
+            }
+            catch (Exception e) when (e is InstanceNotFoundException || e is InstanceForcedException)
+            {
+                return InstanceFailure(e);
             }
             catch (Exception e)
             {

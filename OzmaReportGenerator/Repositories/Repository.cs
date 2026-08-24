@@ -25,7 +25,7 @@ namespace ReportGenerator.Repositories
                 throw new Exception("Instance name cannot be empty");
             var forceInstance = configuration.GetValue<string>("OzmaDBSettings:ForceInstance");
             if (forceInstance != null && forceInstance != instanceName)
-                throw new Exception("Instance name cannot be changed by configuration");
+                throw new InstanceForcedException(instanceName, forceInstance);
             dbContext = new ReportGeneratorContext(configuration);
             Instance? instance;
             try
@@ -55,7 +55,7 @@ namespace ReportGenerator.Repositories
                     instance = newInstance;
                 }
                 else
-                    throw new Exception("Instance " + instanceName + " not found in database");
+                    throw new InstanceNotFoundException(instanceName);
             }
             this.instance = instance;
         }

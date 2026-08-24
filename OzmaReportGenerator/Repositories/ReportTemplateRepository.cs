@@ -48,6 +48,29 @@ namespace ReportGenerator.Repositories
             await dbContext.SaveChangesAsync();
         }
 
+        public async Task<bool> UpdateQueryText(int templateId, int queryId, string queryText)
+        {
+            var template = await dbContext.ReportTemplates.Include(p => p.ReportTemplateQueries)
+                .FirstOrDefaultAsync(p => (p.Schema.InstanceId == instance.Id) && (p.Id == templateId));
+            if (template == null) return false;
+
+            var query = template.ReportTemplateQueries.FirstOrDefault(p => p.Id == queryId);
+            if (query == null) return false;
+
+            query.QueryText = queryText;
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<Dictionary<int, int>> LoadQueryCounts()
+        {
+            return await dbContext.ReportTemplateQueries
+                .Where(q => q.Template.Schema.InstanceId == instance.Id)
+                .GroupBy(q => q.TemplateId)
+                .Select(g => new { TemplateId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.TemplateId, x => x.Count);
+        }
+
         public async Task<ReportTemplate?> LoadTemplate(string schemaName, string templateName)
         {
             return await dbContext.ReportTemplates.AsNoTracking().Include(p => p.ReportTemplateQueries)

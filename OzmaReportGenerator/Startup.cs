@@ -87,6 +87,8 @@ namespace ReportGenerator
                         }
                     }
                 );
+            services.AddSingleton<Services.IOzmaPermissionsChecker, Services.OzmaPermissionsChecker>();
+            services.AddMemoryCache();
             services.AddControllersWithViews();
         }
 

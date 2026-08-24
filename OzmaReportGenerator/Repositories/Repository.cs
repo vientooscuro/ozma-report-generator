@@ -37,9 +37,7 @@ namespace ReportGenerator.Repositories
                 // Table doesn't exist
                 if (e.SqlState == "42P01")
                 {
-                    var dbScript = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "db", "db.sql");
-                    var dbScriptContent = File.ReadAllText(dbScript);
-                    dbContext.Database.ExecuteSqlRaw(dbScriptContent);
+                    DatabaseBootstrap.ApplySchemaScript(dbContext);
                     instance = dbContext.Instances.FirstOrDefault(p => p.Name == instanceName);
                 }
                 else

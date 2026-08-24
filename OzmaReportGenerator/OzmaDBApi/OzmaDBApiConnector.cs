@@ -14,12 +14,14 @@ namespace ReportGenerator.OzmaDBApi
         private readonly IConfiguration configuration;
         private readonly TokenProcessor tokenProcessor;
         private readonly string instanceName;
+        private readonly bool allowRefresh;
 
-        public OzmaDBApiConnector(IConfiguration configuration, string instanceName, TokenProcessor tokenProcessor)
+        public OzmaDBApiConnector(IConfiguration configuration, string instanceName, TokenProcessor tokenProcessor, bool allowRefresh = true)
         {
             this.configuration = configuration;
             this.tokenProcessor = tokenProcessor;
             this.instanceName = instanceName;
+            this.allowRefresh = allowRefresh;
         }
 
         private string GetApiUrl()
@@ -59,6 +61,7 @@ namespace ReportGenerator.OzmaDBApi
                     result.IsAdmin = false;
                     break;
                 case System.Net.HttpStatusCode.Unauthorized:
+                    if (!allowRefresh) break;
                     if (retryCount == 0)
                     {
                         retryCount++;

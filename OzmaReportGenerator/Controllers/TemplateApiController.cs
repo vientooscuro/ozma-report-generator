@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -156,6 +158,154 @@ namespace ReportGenerator.Controllers
             {
                 return Failure(e, "Failed to load template");
             }
+        }
+
+        [HttpGet]
+        [Route("templates/{id:int}/file")]
+        public async Task<IActionResult> DownloadTemplate(string instanceName, int id)
+        {
+            try
+            {
+                using var repository = new ReportTemplateRepository(configuration, instanceName);
+                var template = await repository.LoadTemplate(id);
+                if (template == null) return NotFoundError("Template " + id + " not found");
+
+                var bytes = await TemplateService.RestoreOdtAsync(template.OdtWithoutQueries, template.ReportTemplateQueries);
+                return File(bytes, "application/vnd.oasis.opendocument.text", template.Name + ".odt");
+            }
+            catch (Exception e)
+            {
+                return Failure(e, "Failed to download template");
+            }
+        }
+
+        [HttpPost]
+        [Route("templates")]
+        public async Task<IActionResult> CreateTemplate(
+            string instanceName,
+            [FromForm] string schemaName,
+            [FromForm] string name,
+            IFormFile file)
+        {
+            if (string.IsNullOrWhiteSpace(schemaName)) return BadRequestError("Field 'schemaName' is required");
+            if (string.IsNullOrWhiteSpace(name)) return BadRequestError("Field 'name' is required");
+            if (file == null || file.Length == 0) return BadRequestError("File 'file' is required");
+
+            ParsedTemplate parsed;
+            try
+            {
+                parsed = await ParseUploadedFile(file);
+            }
+            catch (Exception e)
+            {
+                logger.LogError(e, "Failed to parse uploaded template");
+                var msg = e.InnerException != null ? e.InnerException.Message : e.Message;
+                return BadRequestError("Uploaded file is not a valid ODT template: " + msg);
+            }
+
+            try
+            {
+                using var schemaRepository = new ReportTemplateSchemaRepository(configuration, instanceName);
+                var schemas = await schemaRepository.LoadAllSchemas();
+                var schema = schemas.FirstOrDefault(s => s.Name == schemaName);
+                if (schema == null) return NotFoundError("Schema '" + schemaName + "' not found");
+
+                var model = new Models.ReportTemplate
+                {
+                    SchemaId = schema.Id,
+                    Name = TemplateService.SanitizeName(name),
+                    OdtWithoutQueries = parsed.OdtWithoutQueries,
+                };
+                foreach (var query in parsed.Queries) model.ReportTemplateQueries.Add(query);
+
+                using var repository = new ReportTemplateRepository(configuration, instanceName);
+                await repository.AddTemplate(model);
+                return Ok(new TemplateSummaryDto
+                {
+                    Id = model.Id,
+                    SchemaId = schema.Id,
+                    SchemaName = schema.Name,
+                    Name = model.Name,
+                    QueryCount = model.ReportTemplateQueries.Count,
+                });
+            }
+            catch (Exception e)
+            {
+                return Failure(e, "Failed to create template");
+            }
+        }
+
+        [HttpPut]
+        [Route("templates/{id:int}/file")]
+        public async Task<IActionResult> ReplaceTemplateFile(string instanceName, int id, IFormFile file)
+        {
+            if (file == null || file.Length == 0) return BadRequestError("File 'file' is required");
+
+            ParsedTemplate parsed;
+            try
+            {
+                parsed = await ParseUploadedFile(file);
+            }
+            catch (Exception e)
+            {
+                logger.LogError(e, "Failed to parse uploaded template");
+                var msg = e.InnerException != null ? e.InnerException.Message : e.Message;
+                return BadRequestError("Uploaded file is not a valid ODT template: " + msg);
+            }
+
+            try
+            {
+                using var repository = new ReportTemplateRepository(configuration, instanceName);
+                var model = await repository.LoadTemplate(id);
+                if (model == null) return NotFoundError("Template " + id + " not found");
+
+                model.ReportTemplateQueries.Clear();
+                foreach (var query in parsed.Queries) model.ReportTemplateQueries.Add(query);
+                model.OdtWithoutQueries = parsed.OdtWithoutQueries;
+                await repository.UpdateTemplate(model);
+
+                using var schemaRepository = new ReportTemplateSchemaRepository(configuration, instanceName);
+                var schema = await schemaRepository.LoadSchema(model.SchemaId);
+
+                return Ok(new TemplateSummaryDto
+                {
+                    Id = model.Id,
+                    SchemaId = model.SchemaId,
+                    SchemaName = schema?.Name ?? "",
+                    Name = model.Name,
+                    QueryCount = model.ReportTemplateQueries.Count,
+                });
+            }
+            catch (Exception e)
+            {
+                return Failure(e, "Failed to replace template file");
+            }
+        }
+
+        [HttpDelete]
+        [Route("templates/{id:int}")]
+        public async Task<IActionResult> DeleteTemplate(string instanceName, int id)
+        {
+            try
+            {
+                using var repository = new ReportTemplateRepository(configuration, instanceName);
+                var template = await repository.LoadTemplate(id);
+                if (template == null) return NotFoundError("Template " + id + " not found");
+                await repository.DeleteTemplate(id);
+                return Ok();
+            }
+            catch (Exception e)
+            {
+                return Failure(e, "Failed to delete template");
+            }
+        }
+
+        private static async Task<ParsedTemplate> ParseUploadedFile(IFormFile file)
+        {
+            await using var stream = new MemoryStream();
+            await file.CopyToAsync(stream);
+            stream.Position = 0;
+            return await TemplateService.ParseUploadAsync(stream);
         }
     }
 }

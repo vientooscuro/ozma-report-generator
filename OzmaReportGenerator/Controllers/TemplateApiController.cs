@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -42,6 +43,16 @@ namespace ReportGenerator.Controllers
         private static IActionResult BadRequestError(string message) =>
             new ObjectResult(new ApiError("bad_request", message)) { StatusCode = 400 };
 
+        /// <summary>PostgreSQL unique violation, i.e. a name that is already taken.</summary>
+        private static bool IsDuplicate(Exception e)
+        {
+            for (Exception? current = e; current != null; current = current.InnerException)
+            {
+                if (current is DbException db && db.SqlState == "23505") return true;
+            }
+            return false;
+        }
+
         [HttpGet]
         [Route("schemas")]
         public async Task<IActionResult> GetSchemas(string instanceName)
@@ -67,10 +78,15 @@ namespace ReportGenerator.Controllers
 
             try
             {
-                using var repository = new ReportTemplateSchemaRepository(configuration, instanceName);
+                // The admin panel registers the instance when it is first opened; the API has to do it too.
+                using var repository = new ReportTemplateSchemaRepository(configuration, instanceName, true);
                 var schema = new Models.ReportTemplateSchema { Name = TemplateService.SanitizeName(request.Name) };
                 await repository.AddSchema(schema);
                 return Ok(new SchemaDto { Id = schema.Id, Name = schema.Name });
+            }
+            catch (Exception e) when (IsDuplicate(e))
+            {
+                return BadRequestError("Schema '" + request.Name + "' already exists");
             }
             catch (Exception e)
             {
@@ -228,6 +244,10 @@ namespace ReportGenerator.Controllers
                     Name = model.Name,
                     QueryCount = model.ReportTemplateQueries.Count,
                 });
+            }
+            catch (Exception e) when (IsDuplicate(e))
+            {
+                return BadRequestError("Template '" + name + "' already exists in schema '" + schemaName + "'");
             }
             catch (Exception e)
             {

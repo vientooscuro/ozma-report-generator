@@ -27,6 +27,9 @@ jobs:
       - name: Check formatting
         run: |
           dotnet format --no-restore --verify-no-changes
+      - name: Test
+        run: |
+          dotnet test --no-restore -r linux-x64 OzmaReportGenerator.Tests/OzmaReportGenerator.Tests.csproj
       - name: Build Release
         run: |
           dotnet publish --no-restore -o out -c Release -r linux-x64 OzmaReportGenerator/OzmaReportGenerator.csproj

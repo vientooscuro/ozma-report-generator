@@ -84,15 +84,13 @@ namespace ReportGenerator
                     throw new Exception("No {{ }} expressions found in template");
 
                 #region syntax check
+                var structureFindings = Services.TemplateAnalyzer.CheckStructure(templateExpressions, loadedQueries);
+                var firstError = structureFindings.FirstOrDefault(f => f.Severity == "error");
+                if (firstError != null) throw new Exception(firstError.Message);
+
                 foreach (var templateExpression in templateExpressions)
                 {
-                    var loadedQuery = loadedQueries.FirstOrDefault(p => p.Name == templateExpression.QueryName);
-                    if (loadedQuery == null)
-                        throw new Exception("Query " + templateExpression.QueryName +
-                                            " from template not found in OzmaDB queries");
-                    if (loadedQuery.QueryType != templateExpression.QueryType)
-                        throw new Exception("Query " + templateExpression.QueryName +
-                                            " return type is different from OzmaDB query type");
+                    var loadedQuery = loadedQueries.First(p => p.Name == templateExpression.QueryName);
 
                     switch (templateExpression.QueryType)
                     {

@@ -76,6 +76,9 @@ curl -s -X POST https://ozma.gogol.school/report-generator/api/gogol/schemas \
 {"id": 9, "name": "ops"}
 ```
 
+Если инстанс ещё не зарегистрирован в базе отчётного генератора, он создаётся здесь же – так же,
+как это делает админка при первом открытии. Повторное имя схемы даёт 400 `bad_request`.
+
 ### DELETE /api/{instance}/schemas/{id}
 
 Удаляет схему вместе со всеми её шаблонами (каскад в БД). Ответ – пустой 200.
@@ -134,6 +137,9 @@ curl -s -X POST https://ozma.gogol.school/report-generator/api/gogol/templates \
 ```json
 {"id": 12, "schemaId": 7, "schemaName": "fin", "name": "invoice", "queryCount": 2}
 ```
+
+Имя шаблона уникально внутри схемы: повтор даёт 400 `bad_request`. Невалидный ODT – тоже 400,
+с текстом ошибки разбора.
 
 ### PUT /api/{instance}/templates/{id}/file
 

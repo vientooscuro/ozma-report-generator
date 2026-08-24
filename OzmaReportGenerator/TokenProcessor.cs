@@ -15,14 +15,18 @@ namespace ReportGenerator
     public class TokenProcessor
     {
         public string AccessToken { get; private set; }
+
+        /// <summary>True when the token came from the Authorization header, i.e. there is no refresh token claim.</summary>
+        public bool IsFromHeader { get; private set; }
         private readonly HttpContext httpContext;
         private readonly IConfiguration configuration;
 
-        private TokenProcessor(IConfiguration configuration, HttpContext httpContext, string accessToken)
+        private TokenProcessor(IConfiguration configuration, HttpContext httpContext, string accessToken, bool isFromHeader)
         {
             this.httpContext = httpContext;
             AccessToken = accessToken;
             this.configuration = configuration;
+            IsFromHeader = isFromHeader;
         }
 
         public static TokenProcessor Create(IConfiguration configuration, HttpContext httpContext)
@@ -33,7 +37,7 @@ namespace ReportGenerator
             {
                 var accessToken = accessTokenFromHeader.ToString().Split(' ');
                 if (accessToken.Length != 2) throw new AuthenticationException("Wrong access token format");
-                return new TokenProcessor(configuration, httpContext, accessToken[1]);
+                return new TokenProcessor(configuration, httpContext, accessToken[1], true);
             }
             else
             {
@@ -43,7 +47,7 @@ namespace ReportGenerator
                 if (accessTokenFromIdentity != null)
                 {
                     // await httpContext.GetTokenAsync(OpenIdConnectDefaults.AuthenticationScheme, "access_token");
-                    return new TokenProcessor(configuration, httpContext, accessTokenFromIdentity.Value);
+                    return new TokenProcessor(configuration, httpContext, accessTokenFromIdentity.Value, false);
                 }
                 else
                 {

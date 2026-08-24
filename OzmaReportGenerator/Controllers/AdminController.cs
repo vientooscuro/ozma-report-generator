@@ -24,10 +24,12 @@ namespace ReportGenerator.Controllers
     public class AdminController : BaseController
     {
         ILogger<AdminController> logger;
+        private readonly IOzmaPermissionsChecker permissionsChecker;
 
-        public AdminController(IConfiguration configuration, ILogger<AdminController> logger) : base(configuration)
+        public AdminController(IConfiguration configuration, ILogger<AdminController> logger, IOzmaPermissionsChecker permissionsChecker) : base(configuration)
         {
             this.logger = logger;
+            this.permissionsChecker = permissionsChecker;
         }
 
         [AllowAnonymous]
@@ -39,14 +41,7 @@ namespace ReportGenerator.Controllers
 
         private async Task<PermissionsResponse?> HasPermissionsForInstance(string instanceName)
         {
-            var isAuthenticated = CreateTokenProcessor();
-            if ((isAuthenticated) && (TokenProcessor != null))
-            {
-                var ozmaDbApiConnector = new OzmaDBApiConnector(configuration, instanceName, TokenProcessor);
-                var permissions = await ozmaDbApiConnector.GetPermissions();
-                return permissions;
-            }
-            return null;
+            return await permissionsChecker.GetPermissions(HttpContext, instanceName);
         }
 
         private async Task<SelectList> LoadSchemaNamesList(string instanceName)

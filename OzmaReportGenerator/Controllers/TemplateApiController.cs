@@ -300,6 +300,69 @@ namespace ReportGenerator.Controllers
             }
         }
 
+        [HttpPut]
+        [Route("templates/{id:int}/queries/{queryId:int}")]
+        public async Task<IActionResult> UpdateQuery(string instanceName, int id, int queryId, [FromBody] UpdateQueryRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.QueryText))
+                return BadRequestError("Field 'queryText' is required");
+
+            try
+            {
+                using var repository = new ReportTemplateRepository(configuration, instanceName);
+                var updated = await repository.UpdateQueryText(id, queryId, request.QueryText);
+                if (!updated) return NotFoundError("Query " + queryId + " of template " + id + " not found");
+
+                var template = await repository.LoadTemplate(id);
+                var query = template!.ReportTemplateQueries.First(q => q.Id == queryId);
+                return Ok(new TemplateQueryDto
+                {
+                    Id = query.Id,
+                    Name = query.Name,
+                    Type = ((QueryType)query.QueryType).ToString(),
+                    QueryText = query.QueryText,
+                });
+            }
+            catch (Exception e)
+            {
+                return Failure(e, "Failed to update query");
+            }
+        }
+
+        [HttpPost]
+        [Route("templates/{id:int}/analyze")]
+        public async Task<IActionResult> AnalyzeTemplate(string instanceName, int id)
+        {
+            try
+            {
+                using var repository = new ReportTemplateRepository(configuration, instanceName);
+                var template = await repository.LoadTemplate(id);
+                if (template == null) return NotFoundError("Template " + id + " not found");
+
+                using var schemaRepository = new ReportTemplateSchemaRepository(configuration, instanceName);
+                var schema = await schemaRepository.LoadSchema(template.SchemaId);
+
+                Sandwych.Reporting.OpenDocument.OdfDocument odt;
+                await using (var stream = new MemoryStream(template.OdtWithoutQueries))
+                    odt = await Sandwych.Reporting.OpenDocument.OdfDocument.LoadFromAsync(stream);
+
+                var analysis = TemplateAnalyzer.Analyze(odt, template.ReportTemplateQueries);
+                return Ok(new
+                {
+                    templateId = template.Id,
+                    schemaName = schema?.Name ?? "",
+                    name = template.Name,
+                    queries = analysis.Queries,
+                    expressions = analysis.Expressions,
+                    findings = analysis.Findings,
+                });
+            }
+            catch (Exception e)
+            {
+                return Failure(e, "Failed to analyze template");
+            }
+        }
+
         private static async Task<ParsedTemplate> ParseUploadedFile(IFormFile file)
         {
             await using var stream = new MemoryStream();

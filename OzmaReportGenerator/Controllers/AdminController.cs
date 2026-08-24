@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using ReportGenerator.OzmaDBApi;
 using ReportGenerator.Models;
 using ReportGenerator.Repositories;
+using ReportGenerator.Services;
 using Sandwych.Reporting.OpenDocument;
 using Test.Models;
 
@@ -84,11 +85,6 @@ namespace ReportGenerator.Controllers
             return View();
         }
 
-        private static string RemoveRestrictedSymbols(string text)
-        {
-            return text.Replace(" ", "").Replace("/", "").Replace("__", "");
-        }
-
         #region Схемы шаблонов 
         [HttpGet]
         [Route("admin/{instanceName}/LoadSchemas")]
@@ -118,7 +114,7 @@ namespace ReportGenerator.Controllers
 
             using (var repository = new ReportTemplateSchemaRepository(configuration, instanceName))
             {
-                model.Name = RemoveRestrictedSymbols(model.Name);
+                model.Name = TemplateService.SanitizeName(model.Name);
                 await repository.AddSchema(model);
                 return Ok();
             }
@@ -176,45 +172,26 @@ namespace ReportGenerator.Controllers
                 return StatusCode(401, "relog");
             if (!permissions.IsAdmin) return Unauthorized("User has no admin rights for this instance");
 
-            OdfDocument odtWithQueries;
-            OdfDocument odtWithoutQueries;
-            IList<OzmaDBQuery> queries;
+            ParsedTemplate parsed;
             try
             {
-                await using (var stream = new MemoryStream())
-                {
-                    await UploadedOdtFile.CopyToAsync(stream);
-                    odtWithQueries = await OdfDocument.LoadFromAsync(stream);
-                }
-
-                queries = OpenDocumentTextFunctions.GetQueriesFromOdt(odtWithQueries);
-                odtWithoutQueries = OpenDocumentTextFunctions.RemoveQueriesFromOdt(odtWithQueries);
-                var odtTemplate = new OdtTemplate(odtWithoutQueries);
+                await using var stream = new MemoryStream();
+                await UploadedOdtFile.CopyToAsync(stream);
+                stream.Position = 0;
+                parsed = await TemplateService.ParseUploadAsync(stream);
             }
             catch (Exception e)
             {
                 logger.LogError(e, "Failed to add template");
-                string msg;
-                if (e.InnerException != null) msg = e.InnerException.Message;
-                else msg = e.Message;
+                var msg = e.InnerException != null ? e.InnerException.Message : e.Message;
                 return StatusCode(500, msg);
             }
 
-            await using (var stream = new MemoryStream())
+            model.OdtWithoutQueries = parsed.OdtWithoutQueries;
+            model.Name = TemplateService.SanitizeName(model.Name);
+            foreach (var query in parsed.Queries)
             {
-                await odtWithoutQueries.SaveAsync(stream);
-                model.OdtWithoutQueries = stream.ToArray();
-            }
-            model.Name = RemoveRestrictedSymbols(model.Name);
-            foreach (var query in queries)
-            {
-                var newQuery = new ReportTemplateQuery
-                {
-                    Name = query.Name,
-                    QueryText = query.QueryTextWithoutParameterValues,
-                    QueryType = (short)query.QueryType
-                };
-                model.ReportTemplateQueries.Add(newQuery);
+                model.ReportTemplateQueries.Add(query);
             }
             using (var repository = new ReportTemplateRepository(configuration, instanceName))
             {
@@ -232,26 +209,18 @@ namespace ReportGenerator.Controllers
                 return StatusCode(401, "relog");
             if (!permissions.IsAdmin) return Unauthorized("User has no admin rights for this instance");
 
-            OdfDocument odtWithQueries;
-            OdfDocument odtWithoutQueries;
-            IList<OzmaDBQuery> queries;
+            ParsedTemplate parsed;
             try
             {
-                await using (var stream = new MemoryStream())
-                {
-                    await UploadedOdtFile.CopyToAsync(stream);
-                    odtWithQueries = await OdfDocument.LoadFromAsync(stream);
-                }
-                queries = OpenDocumentTextFunctions.GetQueriesFromOdt(odtWithQueries);
-                odtWithoutQueries = OpenDocumentTextFunctions.RemoveQueriesFromOdt(odtWithQueries);
-                var odtTemplate = new OdtTemplate(odtWithoutQueries);
+                await using var stream = new MemoryStream();
+                await UploadedOdtFile.CopyToAsync(stream);
+                stream.Position = 0;
+                parsed = await TemplateService.ParseUploadAsync(stream);
             }
             catch (Exception e)
             {
                 logger.LogError(e, "Failed to update template");
-                string msg;
-                if (e.InnerException != null) msg = e.InnerException.Message;
-                else msg = e.Message;
+                var msg = e.InnerException != null ? e.InnerException.Message : e.Message;
                 return StatusCode(500, msg);
             }
 
@@ -260,21 +229,11 @@ namespace ReportGenerator.Controllers
                 var model = await repository.LoadTemplate(templateId);
                 if (model == null) throw new Exception("Template with id=" + templateId + " not found");
                 model.ReportTemplateQueries.Clear();
-                foreach (var query in queries)
+                foreach (var query in parsed.Queries)
                 {
-                    var newQuery = new ReportTemplateQuery
-                    {
-                        Name = query.Name,
-                        QueryText = query.QueryTextWithoutParameterValues,
-                        QueryType = (short)query.QueryType
-                    };
-                    model.ReportTemplateQueries.Add(newQuery);
+                    model.ReportTemplateQueries.Add(query);
                 }
-                await using (var stream = new MemoryStream())
-                {
-                    await odtWithoutQueries.SaveAsync(stream);
-                    model.OdtWithoutQueries = stream.ToArray();
-                }
+                model.OdtWithoutQueries = parsed.OdtWithoutQueries;
                 await repository.UpdateTemplate(model);
                 return Ok();
             }
@@ -294,18 +253,7 @@ namespace ReportGenerator.Controllers
                 var template = await repository.LoadTemplate(id);
                 if (template == null) return NotFound();
 
-                OdfDocument odt;
-                await using (var stream = new MemoryStream(template.OdtWithoutQueries))
-                    odt = await OdfDocument.LoadFromAsync(stream);
-
-                OpenDocumentTextFunctions.RestoreQueriesInOdt(odt, template.ReportTemplateQueries);
-
-                byte[] bytes;
-                await using (var stream = new MemoryStream())
-                {
-                    await odt.SaveAsync(stream);
-                    bytes = stream.ToArray();
-                }
+                var bytes = await TemplateService.RestoreOdtAsync(template.OdtWithoutQueries, template.ReportTemplateQueries);
                 return File(bytes, "application/vnd.oasis.opendocument.text", template.Name + ".odt");
             }
         }
